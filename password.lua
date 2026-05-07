@@ -1,4 +1,4 @@
--- Compact Touchscreen Password Lock (1 block)
+-- Compact Touchscreen Password Lock (2x size, square buttons)
 local monitor = peripheral.find("monitor")
 if not monitor then
     error("Monitor not found! Place an Advanced Monitor next to the computer")
@@ -14,79 +14,97 @@ local attempts = 0
 local accessGranted = false
 local blocked = false
 
--- Screen dimensions (1 block = 7 wide, 5 tall at scale 1)
-local W = 7
-local H = 5
-
--- Button layout (3 columns, 4 rows)
--- Row 1: 1 2 3
--- Row 2: 4 5 6
--- Row 3: 7 8 9
--- Row 4: < 0 E
+-- Button layout: each button is 2x2 on screen
+-- Grid is 3 columns × 4 rows, starting from bottom of screen
 local buttons = {
-    {char = "1", x = 1, y = 1},
-    {char = "2", x = 3, y = 1},
-    {char = "3", x = 5, y = 1},
-    {char = "4", x = 1, y = 2},
-    {char = "5", x = 3, y = 2},
-    {char = "6", x = 5, y = 2},
-    {char = "7", x = 1, y = 3},
-    {char = "8", x = 3, y = 3},
-    {char = "9", x = 5, y = 3},
-    {char = "<", x = 1, y = 4},  -- Backspace
-    {char = "0", x = 3, y = 4},
-    {char = "E", x = 5, y = 4},  -- Enter
+    {char = "1", x = 1, y = 3},   -- row 1: 1 2 3
+    {char = "2", x = 4, y = 3},
+    {char = "3", x = 7, y = 3},
+    {char = "4", x = 1, y = 5},   -- row 2: 4 5 6
+    {char = "5", x = 4, y = 5},
+    {char = "6", x = 7, y = 5},
+    {char = "7", x = 1, y = 7},   -- row 3: 7 8 9
+    {char = "8", x = 4, y = 7},
+    {char = "9", x = 7, y = 7},
+    {char = "<", x = 1, y = 9},   -- row 4: < 0 E
+    {char = "0", x = 4, y = 9},
+    {char = "E", x = 7, y = 9},
 }
 
--- Draw the interface
+-- Button size (square, 2x2 characters)
+local BTN_W = 2
+local BTN_H = 2
+
+-- Draw a square button with character centered inside
+local function drawButton(btn)
+    local x, y = btn.x, btn.y
+    
+    -- Draw background square
+    monitor.setBackgroundColor(colors.gray)
+    for dy = 0, BTN_H - 1 do
+        monitor.setCursorPos(x, y + dy)
+        for dx = 0, BTN_W - 1 do
+            monitor.write(" ")
+        end
+    end
+    
+    -- Draw character in center
+    local charX = x + math.floor(BTN_W / 2)
+    local charY = y + math.floor(BTN_H / 2)
+    monitor.setCursorPos(charX, charY)
+    monitor.setBackgroundColor(colors.gray)
+    monitor.setTextColor(colors.white)
+    monitor.write(btn.char)
+end
+
+-- Draw the full interface
 local function draw()
     monitor.setBackgroundColor(colors.black)
     monitor.clear()
-    monitor.setTextScale(0.5)  -- Tiny text to fit more
+    monitor.setTextScale(1)
     
-    -- Show password as dots
+    -- Password display (dots)
     local dots = ""
     for i = 1, #enteredPassword do
-        dots = dots .. "."
+        dots = dots .. "*"
     end
     if #dots == 0 then dots = "_" end
     
-    monitor.setCursorPos(1, 1)
+    monitor.setCursorPos(2, 1)
     monitor.setTextColor(colors.white)
-    monitor.write(dots)
+    monitor.write("PW: " .. dots)
     
-    -- Status line
-    monitor.setCursorPos(1, 2)
-    if blocked then
-        monitor.setTextColor(colors.red)
-        monitor.write("BLOCKED")
-    elseif accessGranted then
-        monitor.setTextColor(colors.green)
-        monitor.write("OPEN")
-    elseif attempts > 0 then
-        monitor.setTextColor(colors.orange)
-        monitor.write("x" .. attempts)
-    else
-        monitor.setTextColor(colors.gray)
-        monitor.write("----")
+    -- Draw all buttons
+    for _, btn in ipairs(buttons) do
+        drawButton(btn)
     end
     
-    -- Draw button grid
-    monitor.setBackgroundColor(colors.gray)
-    for _, btn in ipairs(buttons) do
-        monitor.setCursorPos(btn.x, btn.y + 2)
-        monitor.setTextColor(colors.white)
-        monitor.write(btn.char)
+    -- Status line at bottom
+    monitor.setCursorPos(1, 12)
+    monitor.setBackgroundColor(colors.black)
+    if blocked then
+        monitor.setTextColor(colors.red)
+        monitor.write("  BLOCKED  ")
+    elseif accessGranted then
+        monitor.setTextColor(colors.green)
+        monitor.write("  GRANTED  ")
+    elseif attempts > 0 then
+        monitor.setTextColor(colors.orange)
+        monitor.write(" Try:" .. attempts .. "/" .. MAX_ATTEMPTS)
+    else
+        monitor.setTextColor(colors.gray)
+        monitor.write("  ENTER PW ")
     end
     
     monitor.setBackgroundColor(colors.black)
     monitor.setTextColor(colors.white)
 end
 
--- Check if touch hits a button
+-- Check if touch hits a button (square area detection)
 local function getButton(x, y)
     for _, btn in ipairs(buttons) do
-        if x >= btn.x and x < btn.x + 1 and y == btn.y + 2 then
+        if x >= btn.x and x < btn.x + BTN_W and 
+           y >= btn.y and y < btn.y + BTN_H then
             return btn
         end
     end
@@ -110,13 +128,13 @@ local function press(btn)
             end
         end
     elseif btn.char == "<" then
-        -- Backspace
+        -- Backspace: remove last character
         if #enteredPassword > 0 then
             enteredPassword = string.sub(enteredPassword, 1, -2)
         end
     else
-        -- Digit
-        if #enteredPassword < 6 then
+        -- Digit button
+        if #enteredPassword < 8 then
             enteredPassword = enteredPassword .. btn.char
         end
     end
@@ -133,7 +151,7 @@ end
 
 -- Main
 draw()
-print("Touch the monitor to enter password. Ctrl+T to exit")
+print("Lock system ready. Touch the monitor. Ctrl+T to exit.")
 
 while true do
     local event, side, x, y = os.pullEvent("monitor_touch")
@@ -144,7 +162,7 @@ while true do
         draw()
     end
     
-    -- Auto-close after 3 seconds
+    -- Auto-close door after 3 seconds
     if accessGranted then
         sleep(3)
         reset()
